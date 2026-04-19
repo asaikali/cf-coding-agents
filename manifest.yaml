@@ -10,5 +10,8 @@ applications:
     ANTHROPIC_API_KEY: ((anthropic_api_key))
   health-check-type: none
   processes:
+    - type: web
+      command: sleep infinity
+      instances: 0
     - type: task
       command: ./bin/claude -p "hello" < /dev/null
