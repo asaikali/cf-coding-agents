@@ -1,3 +1,8 @@
 ---
+keys:
+  - https://packages.adoptium.net/artifactory/api/gpg/key/public
+repos:
+  - deb https://packages.adoptium.net/artifactory/deb jammy main
 packages:
   - git
+  - temurin-25-jdk

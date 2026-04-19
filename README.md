@@ -27,3 +27,65 @@ route, no web process, no idle instance burning resources between runs.
 
 This keeps the CF surface area small (one app, one droplet) while letting each
 agent invocation be independent, isolated, and cheap.
+
+## How the toolbox is built with `apt-buildpack`
+
+`apt-buildpack` is a Cloud Foundry buildpack that installs Debian/Ubuntu
+packages into the droplet at staging time. We drive it with a small
+declarative file listing the packages the agent needs — git, language
+runtimes, anything the agent might shell out to — and the buildpack fetches
+and unpacks them into the container.
+
+Out of the box the buildpack pulls from the package repositories that back
+the CF stack (cflinuxfs4 → Ubuntu Jammy). For packages that aren't in those
+default repos, the same declarative file also accepts extra GPG keys and
+third-party apt sources, so any vendor that publishes a Debian repository can
+be pulled in the same way.
+
+`apt-buildpack` is chained **ahead** of `binary_buildpack` in the manifest.
+This matters: only the last buildpack in the chain owns the release/start
+contract and decides how the app launches. `apt-buildpack`'s job ends at
+"everything you declared is installed"; `binary_buildpack` remains
+responsible for launching the agent. Installed files land under a well-known
+dependencies directory inside the droplet. Some Debian packages put their
+binaries straight on `PATH`; others expect `update-alternatives` symlinks
+that are only created on a full Debian install and therefore need a little
+environment wiring (see the `.profile.d/` section below).
+
+### Bringing in JDK 25 (Temurin)
+
+The Ubuntu repositories behind the CF stack ship OpenJDK 17 and 21, not 25,
+and they ship Canonical's build rather than a specific vendor distribution.
+To get Temurin 25 specifically we add Adoptium's GPG key and apt repo to the
+same declarative file that already lists `git`, alongside the Temurin
+package name. At staging time the buildpack trusts the key, fetches from
+Adoptium, and unpacks the JDK into the droplet.
+
+Temurin's deb installs into a versioned JVM directory and relies on
+`update-alternatives` to put `java` and `javac` on `PATH` — a step that only
+runs on a full Debian system, not inside an apt-buildpack droplet. We bridge
+that gap with a small `.profile.d/` script that sets `JAVA_HOME` and
+prepends its `bin/` directory to `PATH`, so every task invocation (including
+ad-hoc `cf run-task --command '...'` runs) finds Java without ceremony.
+
+The same pattern generalises to other JDK distributions — Corretto, Zulu,
+GraalVM — or to any toolchain delivered as a third-party Debian repo: swap
+the key, the repo, and the package name.
+
+## Wiring environment with `.profile.d/`
+
+Some tools installed via `apt-buildpack` need extra environment setup before
+they're usable — the agent might expect `JAVA_HOME` set, or a binary located
+outside the default `PATH`. Rather than bake that into every task command, we
+rely on Cloud Foundry's `.profile.d/` convention.
+
+Any `*.sh` file in a `.profile.d/` directory at the root of the pushed app is
+uploaded with the droplet (CF includes dotfiles by default, respecting only
+`.cfignore`) and **sourced by CF's launcher before any start command runs** —
+whether that's the declared task process or an ad-hoc `cf run-task --command`.
+Each invocation gets a fresh shell, so there's no cross-task leakage, and
+exported variables are inherited by the agent and everything it forks.
+
+This gives us a single, file-based place to bind buildpack-installed tools
+into the container's environment, without touching the manifest, the task
+command, or the buildpack itself.
