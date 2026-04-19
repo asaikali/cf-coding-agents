@@ -8,7 +8,10 @@ repos:
   - deb https://deb.nodesource.com/node_22.x nodistro main
   - deb https://cli.github.com/packages stable main
 packages:
-  - git
   - temurin-25-jdk
   - nodejs
   - gh
+  - ripgrep
+  - python3
+  - python3-pip
+  - python3-distutils

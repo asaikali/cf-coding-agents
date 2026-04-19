@@ -52,6 +52,42 @@ binaries straight on `PATH`; others expect `update-alternatives` symlinks
 that are only created on a full Debian install and therefore need a little
 environment wiring (see the `.profile.d/` section below).
 
+### What the stack already ships, and what we add
+
+Before adding anything to the apt file, check what cflinuxfs4 already
+includes. The authoritative list lives in the stack's repo at
+[`cloudfoundry/cflinuxfs4`](https://github.com/cloudfoundry/cflinuxfs4/blob/main/packages/cflinuxfs4).
+Listing a package that's already in the base stack just inflates the droplet
+and slows staging for no functional gain.
+
+cflinuxfs4 gives us a lot of the basics for free — among them `git`, `jq`,
+`unzip`/`zip`, `build-essential` (gcc, g++, make), `ca-certificates`, `curl`,
+`wget`, `openssl`, and the usual diagnostic utilities. None of those appear
+in our apt file.
+
+What we *do* install via `apt-buildpack`, and why a coding agent wants each:
+
+- **`temurin-25-jdk`** — the agent needs to compile and run Java code for
+  the target project, and we want a specific vendor and LTS rather than
+  whatever OpenJDK point release Ubuntu happens to ship.
+- **`nodejs`** (via NodeSource) — Vue and most modern JS tooling assume a
+  current Node LTS; Ubuntu's packaged Node is several majors behind and not
+  viable for the kinds of `npm`/`pnpm`/`vite` workflows the agent will
+  trigger.
+- **`gh`** — so the agent can read issues, open PRs, comment on reviews, and
+  inspect CI runs through one well-known CLI instead of hand-rolling
+  GitHub's REST API from shell.
+- **`ripgrep`** — agents grep a lot, and `rg` is an order of magnitude
+  faster than `grep -r` on real-world repos; the time saved across many
+  invocations is material.
+- **`python3` / `python3-pip` / `python3-distutils`** — ad-hoc project
+  scripts in the wild routinely assume Python, and some native `npm` addons
+  shell out to it during install.
+
+Anything else the agent needs should be evaluated against the same test: is
+it already in the stack list linked above? If yes, skip. If no, add it
+here with a short reason.
+
 ### Bringing in JDK 25 (Temurin)
 
 The Ubuntu repositories behind the CF stack ship OpenJDK 17 and 21, not 25,
