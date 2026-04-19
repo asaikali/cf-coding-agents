@@ -154,3 +154,40 @@ exported variables are inherited by the agent and everything it forks.
 This gives us a single, file-based place to bind buildpack-installed tools
 into the container's environment, without touching the manifest, the task
 command, or the buildpack itself.
+
+## How credentials reach the agent
+
+The agent needs two separate secrets to be useful: an **Anthropic API key**
+so the model can be called, and a **GitHub token** so the agent can read
+issues, open PRs, and push branches. Neither is baked into the droplet, and
+neither lives in a tracked file in this repo.
+
+The flow has the same shape for both secrets:
+
+1. **The secret lives on the developer's laptop.** The Anthropic key is
+   expected in a shell environment variable. The GitHub token is sourced
+   live from `gh`'s own secure storage (on macOS, the system Keychain), so
+   there's no file on disk holding it — whatever `gh` is logged in as
+   locally is what the push will carry.
+2. **Push time forwards them.** The push script reads each secret locally
+   and hands it to `cf push` as a `--var`, which resolves into placeholders
+   under the manifest's `env:` block. CF stores those values as the app's
+   environment and redacts them in `cf env` output.
+3. **The container sees ordinary env vars.** Inside every task invocation
+   the secrets appear as plain environment variables. The agent picks up
+   its API key directly. `gh` picks up the GitHub token automatically
+   (it's the env var `gh` itself looks for). A small `.profile.d/` script
+   additionally registers `gh` as `git`'s HTTPS credential helper, so raw
+   `git clone`/`push` over HTTPS transparently use the same token without
+   any extra wiring.
+
+Because the GitHub token is fetched live from `gh`'s local storage at every
+push, rotation is essentially free: re-login with `gh` or rotate the token
+in GitHub's UI, and the next `cf push` carries the new value. The running
+droplet keeps whatever was current at the last push until it is re-pushed.
+
+The scoping of the token is inherited from whatever the laptop's `gh`
+session has — fine for local experimentation. For a more production-shaped
+setup, the same env-var contract works with a fine-grained PAT scoped to
+specific repos, or with a short-lived GitHub App installation token
+refreshed by an external process.
