@@ -6,6 +6,7 @@ APP=agent
 cf run-task "$APP" --name gitcheck    --command 'git --version'
 cf run-task "$APP" --name javacheck   --command 'java -version'
 cf run-task "$APP" --name nodecheck   --command 'node --version && npm --version'
+cf run-task "$APP" --name ghcheck     --command 'gh --version'
 cf run-task "$APP" --name claudecheck --command './bin/claude --version < /dev/null'
 
 echo

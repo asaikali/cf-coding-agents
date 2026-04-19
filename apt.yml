@@ -2,10 +2,13 @@
 keys:
   - https://packages.adoptium.net/artifactory/api/gpg/key/public
   - https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key
+  - https://cli.github.com/packages/githubcli-archive-keyring.gpg
 repos:
   - deb https://packages.adoptium.net/artifactory/deb jammy main
   - deb https://deb.nodesource.com/node_22.x nodistro main
+  - deb https://cli.github.com/packages stable main
 packages:
   - git
   - temurin-25-jdk
   - nodejs
+  - gh

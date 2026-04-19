@@ -88,6 +88,19 @@ the box. This is the contrast worth internalising — whether a given package
 needs env wiring depends on *where the deb drops its binaries*, not on the
 buildpack itself.
 
+### Bringing in the GitHub CLI (`gh`)
+
+A coding agent that works against GitHub — reading issues, opening PRs,
+checking CI — benefits from having `gh` in the container. GitHub publishes
+an official apt repo, so the declaration is the same shape as the others:
+key, repo, and package. The deb drops `gh` onto the default `PATH`, so no
+`.profile.d/` shim is needed, matching the Node pattern rather than the JDK
+one.
+
+One incidental note: GitHub's published key is a *binary* GPG key rather
+than the ASCII-armored form, and `apt-buildpack` handles either — so no
+extra massaging is required.
+
 ## Wiring environment with `.profile.d/`
 
 Some tools installed via `apt-buildpack` need extra environment setup before
