@@ -72,6 +72,22 @@ The same pattern generalises to other JDK distributions — Corretto, Zulu,
 GraalVM — or to any toolchain delivered as a third-party Debian repo: swap
 the key, the repo, and the package name.
 
+### Bringing in Node.js LTS (NodeSource)
+
+The Node.js that ships in the Ubuntu stack is several major versions behind
+the current LTS line, so it's not viable for an agent that runs modern
+JavaScript tooling. We pull from NodeSource, which publishes an apt repo
+keyed by Node's major version. Adding its GPG key, its repo, and the
+`nodejs` package alongside the existing Temurin and git entries is enough
+to land a current Node LTS — with `npm` bundled in — into the droplet.
+
+Unlike the JDK case, no `.profile.d/` shim is needed: NodeSource's package
+installs `node` and `npm` under a directory that `apt-buildpack` already
+prepends to `PATH`, so both binaries are available to task commands out of
+the box. This is the contrast worth internalising — whether a given package
+needs env wiring depends on *where the deb drops its binaries*, not on the
+buildpack itself.
+
 ## Wiring environment with `.profile.d/`
 
 Some tools installed via `apt-buildpack` need extra environment setup before
