@@ -1,0 +1,14 @@
+---
+applications:
+- name: agent
+  no-route: true
+  buildpacks:
+    - binary_buildpack
+  memory: 1G
+  disk_quota: 4G
+  env:
+    ANTHROPIC_API_KEY: ((anthropic_api_key))
+  health-check-type: none
+  processes:
+    - type: task
+      command: ./bin/claude -p "hello" < /dev/null
