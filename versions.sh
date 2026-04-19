@@ -22,3 +22,25 @@ check gcc       gcc --version
 check ripgrep   rg --version
 check python3   python3 --version
 check pip3      pip3 --version
+
+# Prove the GitHub credential flow end-to-end: clone a private repo over HTTPS
+# (which forces the credential helper wired up by .profile.d/github.sh). If
+# there is no private repo we can see, fall back to a public one so at least
+# git/HTTPS itself is exercised.
+echo "== git clone (auth) =="
+tmp_repo="$(mktemp -d)"
+private_repo="$(gh repo list --visibility private --limit 1 --json nameWithOwner -q '.[0].nameWithOwner' 2>/dev/null || true)"
+if [ -n "$private_repo" ]; then
+  if git clone --depth 1 --quiet "https://github.com/${private_repo}.git" "$tmp_repo/probe" 2>&1; then
+    echo "OK: cloned private repo ${private_repo}"
+  else
+    echo "FAIL: could not clone private repo ${private_repo}"
+  fi
+else
+  if git clone --depth 1 --quiet https://github.com/octocat/Hello-World.git "$tmp_repo/probe" 2>&1; then
+    echo "OK: cloned public repo (no private repo visible to this token)"
+  else
+    echo "FAIL: could not clone public repo"
+  fi
+fi
+rm -rf "$tmp_repo"

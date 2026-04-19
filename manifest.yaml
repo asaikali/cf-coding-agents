@@ -9,6 +9,7 @@ applications:
   disk_quota: 4G
   env:
     ANTHROPIC_API_KEY: ((anthropic_api_key))
+    GH_TOKEN: ((github_token))
   health-check-type: none
   processes:
     - type: web
