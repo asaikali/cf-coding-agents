@@ -3,6 +3,7 @@ applications:
 - name: agent
   no-route: true
   buildpacks:
+    - https://github.com/cloudfoundry/apt-buildpack
     - binary_buildpack
   memory: 1G
   disk_quota: 4G
