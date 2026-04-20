@@ -1,0 +1,11 @@
+---
+keys:
+  - https://cli.github.com/packages/githubcli-archive-keyring.gpg
+  - https://packages.adoptium.net/artifactory/api/gpg/key/public
+repos:
+  - deb https://cli.github.com/packages stable main
+  - deb https://packages.adoptium.net/artifactory/deb jammy main
+packages:
+  - gh
+  - ripgrep
+  - temurin-25-jdk

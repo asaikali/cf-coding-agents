@@ -19,6 +19,7 @@ between runs.
 |---|---|---|
 | [`01-claude-cli/`](01-claude-cli/) | The Claude Code CLI binary, downloaded and run directly | Driving a droplet with the `apt-buildpack` + `binary_buildpack` chain: fetch the agent binary, install a third-party JDK and Node LTS via extra apt repositories, wire environment with `.profile.d/`, deliver secrets via user-provided services. |
 | [`02-claude-python-sdk/`](02-claude-python-sdk/) | A Python agent built on the [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk/overview), resolved by uv | Keeping every pattern from scenario 1 and swapping only the release buildpack to Tanzu's `python_buildpack`, which reads `pyproject.toml` and `uv.lock` natively. Shows what actually changes when the agent is a library instead of a binary. |
+| [`03-claude-issue-agent/`](03-claude-issue-agent/) | An SDK-driven agent that treats GitHub issues as prompts and opens a PR closing each one | Extending scenario 2 into a real coding workflow: a thin Python wrapper hands the SDK a prompt that tells it to clone the target repo, read the issue, implement, test, commit, push, and open a PR — using `gh` and `git` through its `Bash` tool. Shows how little glue is needed around the SDK once the droplet has the right tools and credentials. Runs against a forked [Spring PetClinic](https://github.com/asaikali/spring-petclinic). |
 
 Start with `01-claude-cli/` — the patterns it establishes apply to every
 scenario that follows; later scenarios only change the agent payload.

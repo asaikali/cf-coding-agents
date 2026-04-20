@@ -1,0 +1,8 @@
+[project]
+name = "cf-issue-agent"
+version = "0.1.0"
+description = "Cloud Foundry task that turns a GitHub issue into a pull request using the Claude Agent SDK."
+requires-python = ">=3.10"
+dependencies = [
+  "claude-agent-sdk>=0.1.0",
+]
