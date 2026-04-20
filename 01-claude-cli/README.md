@@ -24,34 +24,14 @@ covers only what's specific to the CLI-binary payload.
 
 ## Layout
 
-This scenario splits "what gets deployed" from "what you run to deploy
-it":
-
-```
-01-claude-cli/
-├── manifest.yaml           ← has `path: ./agent`, so cf push uploads only that dir
-├── push.sh                 ← wraps `cf push` — stays on your laptop
-├── cleanup.sh              ← tears down the app and services
-├── create-services.sh      ← creates/updates the user-provided services
-├── verify.sh               ← submits a cf run-task that invokes versions.sh inside the droplet
-├── download.sh             ← fetches the Claude binary into ./agent/bin/
-└── agent/                  ← exactly what ends up in the droplet
-    ├── apt.yml             ← apt-buildpack reads this at the uploaded tree's root
-    ├── versions.sh         ← baked-in smoke test
-    ├── .profile.d/         ← sourced by CF's launcher before every task
-    │   ├── java.sh
-    │   ├── python.sh
-    │   └── vcap.sh
-    └── bin/                ← gitignored; populated by download.sh
-        └── claude
-```
-
-`apt.yml` and `.profile.d/` live inside `agent/` because both are read
-*inside the droplet* — `apt-buildpack` scans the uploaded tree's root
-for `apt.yml`, and CF's launcher sources `<app_root>/.profile.d/*.sh`
-before every task command. The manifest and shell scripts live outside
-`agent/` because they're read **on your laptop**, by the CF CLI, and
-don't need to ride along into the container.
+The scenario root holds the `manifest.yaml` and the shell scripts you
+run on your laptop. Everything that `cf push` uploads lives under
+`agent/` — the manifest's `path: ./agent` tells the CF CLI to upload
+only that subtree. Files that need to be read *inside* the droplet
+(the `apt.yml` for `apt-buildpack`, the `.profile.d/*.sh` sourced by
+CF's launcher, the downloaded `bin/claude`) therefore sit inside
+`agent/`; files that are read by the CF CLI on your laptop stay at the
+scenario root.
 
 ## What this scenario installs via `apt.yml`, and why
 

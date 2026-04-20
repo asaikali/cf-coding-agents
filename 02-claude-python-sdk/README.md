@@ -31,22 +31,12 @@ The only genuinely new parts are the **agent payload** and the
 
 ## Layout
 
-```
-02-claude-python-sdk/
-├── manifest.yaml           ← has `path: ./agent`, so cf push uploads only that dir
-├── push.sh                 ← wraps `cf push` — stays on your laptop
-├── cleanup.sh              ← tears down the app and services
-├── create-services.sh      ← creates/updates the user-provided services
-├── verify.sh               ← submits a cf run-task that invokes agent/versions.sh
-└── agent/                  ← exactly what ends up in the droplet
-    ├── apt.yml             ← apt-buildpack reads this at the uploaded tree's root
-    ├── pyproject.toml      ← python_buildpack resolves dependencies from this
-    ├── uv.lock             ← committed for reproducible installs
-    ├── agent.py            ← the task entry that calls the SDK
-    ├── versions.sh         ← baked-in smoke test
-    └── .profile.d/         ← sourced by CF's launcher before every task
-        └── vcap.sh
-```
+Same shape as scenario 1: the scenario root holds the `manifest.yaml`
+and laptop-side shell scripts; everything that `cf push` uploads lives
+under `agent/`, courtesy of the manifest's `path: ./agent`. Here that
+subtree holds the Python entrypoint, `pyproject.toml`/`uv.lock` for
+`python_buildpack` to resolve, `apt.yml` for the apt layer, and the
+`.profile.d/vcap.sh` bridge.
 
 ## Running it
 
