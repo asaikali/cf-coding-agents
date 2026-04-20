@@ -15,7 +15,6 @@ check java      java -version
 check node      node --version
 check npm       npm --version
 check gh        gh --version
-check maven     mvn --version
 check jq        jq --version
 check make      make --version
 check gcc       gcc --version
