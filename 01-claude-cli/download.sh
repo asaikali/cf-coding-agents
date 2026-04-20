@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-OUTPUT_DIR="./bin"
+OUTPUT_DIR="./agent/bin"
 mkdir -p "${OUTPUT_DIR}"
 
 # --- Claude Code ---------------------------------------------------------
