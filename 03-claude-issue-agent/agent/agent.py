@@ -32,9 +32,9 @@ Your goal is to implement what the issue asks for and open a pull request
 that closes the issue.
 
 Workflow:
-1. Clone the repo into /tmp/work:
-     gh repo clone {repo} /tmp/work
-2. cd /tmp/work
+1. Clone the repo into ./work:
+     gh repo clone {repo} ./work
+2. cd ./work
 3. Read the issue:
      gh issue view {issue} --repo {repo}
 4. Post a comment on the issue acknowledging you've started and outlining

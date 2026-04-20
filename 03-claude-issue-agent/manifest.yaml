@@ -16,8 +16,6 @@ applications:
     - type: web
       command: sleep infinity
       instances: 0
-      memory: 256M
-      disk_quota: 1G
     - type: task
       command: uv run python agent.py
       memory: 2G

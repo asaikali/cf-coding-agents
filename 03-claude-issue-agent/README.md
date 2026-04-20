@@ -23,8 +23,12 @@ point the same droplet at a different repo.
   Adoptium apt repo) and a `.profile.d/java.sh` shim that exports
   `JAVA_HOME`. Maven itself is not installed; Spring PetClinic ships a
   Maven wrapper (`./mvnw`) that bootstraps Maven on first run.
-- **Larger app** — `manifest.yaml` bumps memory to 2G and disk to 4G to
-  accommodate the JVM, the Maven `.m2` cache, and the PetClinic build.
+- **Larger task resources** — the task process in `manifest.yaml` declares
+  `memory: 2G` and `disk_quota: 8G` to accommodate the JVM, the Maven
+  `.m2` cache, the uv virtualenv, and the PetClinic build. Resources are
+  set on the task process specifically rather than at app level because
+  CF does not cascade app-level `memory`/`disk_quota` onto processes when
+  a `processes:` block is declared.
 - **What's identical** — `apt-buildpack` + `python_buildpack` chain,
   `.profile.d/vcap.sh` parsing `VCAP_SERVICES`, the two user-provided
   services (`anthropic-creds`, `github-creds`), and the task-only app
@@ -48,10 +52,12 @@ or 2):
 ./verify.sh                  # smoke-test the droplet end-to-end
 ```
 
-Then, per issue, set `ISSUE_NUMBER` in the run-task command:
+Then, per issue, invoke the agent through the task process so it inherits
+the 2G/8G resources:
 
 ```sh
 cf run-task agent-issue \
+  --process task \
   --command 'ISSUE_NUMBER=1 uv run python agent.py' \
   --name issue-1
 
