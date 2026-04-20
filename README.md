@@ -14,6 +14,7 @@ both.
 | Directory | Agent shape | Teaches |
 |---|---|---|
 | [`01-claude-cli/`](01-claude-cli/) | The Claude Code CLI binary, downloaded and run directly | Assembling a droplet with `apt-buildpack` for system tools, `.profile.d/` for environment wiring, a `binary_buildpack` release, and user-provided services for credentials. This is the foundation; read it first. |
+| [`02-claude-python-sdk/`](02-claude-python-sdk/) | A Python agent built on the [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk/overview), resolved by uv | Keeping every pattern from scenario 1 — apt-buildpack, `.profile.d/`, UPS-based credentials — and swapping only the release buildpack to Tanzu's `python_buildpack`, which reads `pyproject.toml`/`uv.lock` natively. Shows what actually changes when the agent is a library instead of a binary. |
 
 Start with `01-claude-cli/` — everything it establishes carries over into
 the later scenarios unchanged, so the story is additive rather than

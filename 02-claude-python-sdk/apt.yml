@@ -1,0 +1,8 @@
+---
+keys:
+  - https://cli.github.com/packages/githubcli-archive-keyring.gpg
+repos:
+  - deb https://cli.github.com/packages stable main
+packages:
+  - gh
+  - ripgrep
