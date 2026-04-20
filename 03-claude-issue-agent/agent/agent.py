@@ -13,8 +13,16 @@ work lives in the prompt below, not in Python orchestration code here.
 import asyncio
 import os
 import sys
+from pathlib import Path
 
+import claude_agent_sdk
 from claude_agent_sdk import ClaudeAgentOptions, query
+
+# The Python SDK's default search path for the claude CLI looks at shutil.which
+# and a handful of common install locations (npm global, ~/.local/bin, etc.),
+# none of which are present in the droplet. Point it at the binary the SDK
+# ships with itself, under claude_agent_sdk/_bundled/claude.
+BUNDLED_CLI = str(Path(claude_agent_sdk.__file__).parent / "_bundled" / "claude")
 
 
 def get_env(name: str) -> str:
@@ -70,6 +78,7 @@ async def main() -> None:
 
     options = ClaudeAgentOptions(
         allowed_tools=["Bash", "Read", "Edit", "Glob", "Grep", "Write"],
+        cli_path=BUNDLED_CLI,
     )
 
     async for message in query(prompt=build_prompt(repo, issue), options=options):

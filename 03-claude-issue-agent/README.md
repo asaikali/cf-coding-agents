@@ -49,7 +49,22 @@ or 2):
 ```sh
 ./create-services.sh
 ./push.sh
-./verify.sh                  # smoke-test the droplet end-to-end
+./verify.sh                  # end-to-end smoke test (2-5 min, uses API tokens)
+```
+
+`verify.sh` invokes the agent with a tight verification prompt that clones
+the target repo, runs `./mvnw compile`, boots the app, `curl`s
+`localhost:8080`, and shuts it down. Success prints a literal
+`VERIFIED: clone + compile + run + curl all passed` line. This exercises
+the full chain — git HTTPS auth, JDK, the Maven wrapper, Spring Boot
+startup, local HTTP, and the SDK wiring itself. It consumes a few cents of
+Anthropic tokens per run.
+
+If the smoke test fails, a faster offline-ish probe just walks through the
+installed tools and prints versions (no API calls, no Maven build):
+
+```sh
+cf run-task agent-issue --process task --command 'bash versions.sh'
 ```
 
 Then, per issue, invoke the agent through the task process so it inherits
