@@ -162,32 +162,56 @@ so the model can be called, and a **GitHub token** so the agent can read
 issues, open PRs, and push branches. Neither is baked into the droplet, and
 neither lives in a tracked file in this repo.
 
-The flow has the same shape for both secrets:
+### Why user-provided services instead of manifest env
 
-1. **The secret lives on the developer's laptop.** The Anthropic key is
+The natural first approach — pass each secret as a `cf push --var` and land
+it in the manifest's `env:` block — has a subtle but real leak: every value
+passed to `cf push --var` is an argument on the CLI command line, so it
+appears in the process's argv, in shell history, and in anything that echoes
+the invoked command (like a script with `set -x`). The secret also travels
+with every subsequent push.
+
+Cloud Foundry's idiomatic answer for secrets is a **user-provided service**
+(UPS). The secret is handed to CF once, outside of the push, via a separate
+`cf` command that reads its JSON payload from a file path — not from an
+inline CLI argument — so the secret never appears in argv or shell history.
+The app binds the service by name in the manifest; inside the container the
+secret appears in the `VCAP_SERVICES` JSON blob, which `cf env` redacts.
+Pushes themselves carry no secret material at all.
+
+We use **two separate services** rather than one combined blob so each
+credential can rotate and be shared with other apps independently.
+
+### The flow
+
+1. **The secrets live on the developer's laptop.** The Anthropic key is
    expected in a shell environment variable. The GitHub token is sourced
-   live from `gh`'s own secure storage (on macOS, the system Keychain), so
-   there's no file on disk holding it — whatever `gh` is logged in as
-   locally is what the push will carry.
-2. **Push time forwards them.** The push script reads each secret locally
-   and hands it to `cf push` as a `--var`, which resolves into placeholders
-   under the manifest's `env:` block. CF stores those values as the app's
-   environment and redacts them in `cf env` output.
-3. **The container sees ordinary env vars.** Inside every task invocation
-   the secrets appear as plain environment variables. The agent picks up
-   its API key directly. `gh` picks up the GitHub token automatically
-   (it's the env var `gh` itself looks for). A small `.profile.d/` script
-   additionally registers `gh` as `git`'s HTTPS credential helper, so raw
-   `git clone`/`push` over HTTPS transparently use the same token without
-   any extra wiring.
+   live from `gh`'s own secure storage (on macOS, the system Keychain) —
+   whatever `gh` is logged in as locally is what the laptop carries.
+2. **A small setup script publishes them into CF services.** A shell script
+   reads both secrets locally and passes each one to
+   `cf create-user-provided-service` (or `cf update-user-provided-service`
+   when rotating) through a bash process substitution — an in-memory pipe
+   that gives `cf` a file-like `/dev/fd/...` path to read the JSON from, so
+   the secret lives only in memory and never hits argv or disk. Rotation
+   is just re-running the script in update mode; no `cf push` needed.
+3. **The manifest binds the services by name.** `cf push` itself passes no
+   secret arguments; it just declares which services the app consumes.
+4. **The container hoists them into env vars the tools expect.** A
+   `.profile.d/` script parses `VCAP_SERVICES` at the start of every task
+   invocation, exports `ANTHROPIC_API_KEY` and `GH_TOKEN`, and runs
+   `gh auth setup-git` so raw `git clone`/`push` over HTTPS use the same
+   token as `gh` without any extra wiring. From the agent's perspective the
+   environment looks identical to the simpler env-var design; the difference
+   is entirely upstream.
 
-Because the GitHub token is fetched live from `gh`'s local storage at every
-push, rotation is essentially free: re-login with `gh` or rotate the token
-in GitHub's UI, and the next `cf push` carries the new value. The running
-droplet keeps whatever was current at the last push until it is re-pushed.
+Because the GitHub token is fetched live from `gh`'s local storage each time
+the setup script runs, rotation is essentially free: re-login with `gh` or
+rotate the token in GitHub's UI, then re-run the setup script. The next task
+invocation picks up the new value on its own.
 
 The scoping of the token is inherited from whatever the laptop's `gh`
 session has — fine for local experimentation. For a more production-shaped
-setup, the same env-var contract works with a fine-grained PAT scoped to
+setup, the same service contract works with a fine-grained PAT scoped to
 specific repos, or with a short-lived GitHub App installation token
 refreshed by an external process.
