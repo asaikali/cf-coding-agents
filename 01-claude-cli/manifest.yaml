@@ -1,6 +1,6 @@
 ---
 applications:
-- name: agent
+- name: agent-cli
   path: ./agent
   no-route: true
   buildpacks:

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -eu
 
-APP=agent
+APP=agent-cli
 
 cf run-task "$APP" --name versions --command './versions.sh'
 

@@ -3,4 +3,4 @@ set -euo pipefail
 
 # Secrets live in the 'anthropic-creds' and 'github-creds' user-provided
 # services, bound in the manifest. Run ./create-services.sh first.
-cf push agent --task
+cf push agent-cli --task

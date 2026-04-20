@@ -2,7 +2,7 @@
 
 Invoked by the manifest's task process. Reads the prompt from argv[1], falling
 back to a trivial hello prompt. Prints every message streamed back from the
-agent to stdout so it shows up in `cf logs agent-py --recent`.
+agent to stdout so it shows up in `cf logs agent-sdk --recent`.
 
 The SDK picks up ANTHROPIC_API_KEY from the environment. That env var is
 populated by .profile.d/vcap.sh which parses it out of VCAP_SERVICES.

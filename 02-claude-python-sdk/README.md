@@ -43,8 +43,8 @@ subtree holds the Python entrypoint, `pyproject.toml`/`uv.lock` for
 ```sh
 ./create-services.sh        # first time only; or run scenario 1's version
 ./push.sh                   # build droplet, stage, leave stopped
-cf run-task agent-py --command 'uv run python agent.py "your prompt"'
-cf logs agent-py --recent
+cf run-task agent-sdk --command 'uv run python agent.py "your prompt"'
+cf logs agent-sdk --recent
 ```
 
 ## Notes

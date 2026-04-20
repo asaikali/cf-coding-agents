@@ -1,6 +1,6 @@
 ---
 applications:
-- name: agent-py
+- name: agent-sdk
   path: ./agent
   no-route: true
   buildpacks:

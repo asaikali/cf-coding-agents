@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -eu
 
-APP=agent-py
+APP=agent-sdk
 
 cf run-task "$APP" --name versions --command 'bash versions.sh'
 
