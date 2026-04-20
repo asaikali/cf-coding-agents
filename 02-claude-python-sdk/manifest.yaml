@@ -1,6 +1,7 @@
 ---
 applications:
 - name: agent-py
+  path: ./agent
   no-route: true
   buildpacks:
     - https://github.com/cloudfoundry/apt-buildpack

@@ -26,6 +26,31 @@ and installs the declared dependencies with `uv`. The agent itself is
 `agent.py`, which uses the Claude Agent SDK's `query()` call to run a
 prompt end-to-end — the SDK handles the tool-execution loop.
 
+## Layout
+
+Scenario 2 splits "what gets deployed" from "what you run to deploy it":
+
+```
+02-claude-python-sdk/
+├── manifest.yaml           ← has `path: ./agent`, so cf push uploads only that dir
+├── push.sh                 ← wraps `cf push` — stays on your laptop
+├── cleanup.sh              ← tears down the app and services
+├── create-services.sh      ← creates/updates the user-provided services
+└── agent/                  ← exactly what ends up in the droplet
+    ├── apt.yml             ← apt-buildpack reads this at the uploaded tree's root
+    ├── pyproject.toml      ← python_buildpack resolves dependencies from this
+    ├── agent.py            ← the task entry that calls the SDK
+    └── .profile.d/         ← sourced by CF's launcher before every task
+        └── vcap.sh
+```
+
+`apt.yml` and `.profile.d/` live inside `agent/` because both are read
+*inside the droplet* — `apt-buildpack` scans the uploaded tree's root for
+`apt.yml`, and CF's launcher sources `<app_root>/.profile.d/*.sh` before
+every task command. The manifest and shell scripts live outside `agent/`
+because they're read **on your laptop**, by the CF CLI, and don't need to
+ride along into the container.
+
 ## Running it
 
 ```sh

@@ -4,5 +4,5 @@ version = "0.1.0"
 description = "Cloud Foundry task that runs a Claude Agent SDK agent."
 requires-python = ">=3.10"
 dependencies = [
-  "claude-agent-sdk>=0.2.111",
+  "claude-agent-sdk>=0.1.0",
 ]
