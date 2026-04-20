@@ -90,65 +90,57 @@ the task command, or the buildpack itself.
 
 ### How credentials reach the agent
 
-Every scenario needs two secrets: an **Anthropic API key** so the model
-can be called, and a **GitHub token** so the agent can read issues, open
-PRs, and push branches. Neither is baked into the droplet, and neither
-lives in a tracked file in this repo.
+Every scenario needs two secrets: an **Anthropic API key** for the
+model, and a **GitHub token** for `gh` and for `git` over HTTPS.
+Neither is baked into the droplet; neither lives in a tracked file in
+this repo.
 
 #### Why user-provided services instead of manifest env
 
-The natural first approach — pass each secret as a `cf push --var` and
-land it in the manifest's `env:` block — has a subtle but real leak:
-every value passed to `cf push --var` is an argument on the CLI command
-line, so it appears in the process's argv, in shell history, and in
-anything that echoes the invoked command (like a script with `set -x`).
-The secret also travels with every subsequent push.
-
-Cloud Foundry's idiomatic answer for secrets is a **user-provided
-service** (UPS). The secret is handed to CF once, outside of the push,
-via a separate `cf` command that reads its JSON payload from a file path
-— not from an inline CLI argument — so the secret never appears in argv
-or shell history. The app binds the service by name in the manifest;
-inside the container the secret appears in the `VCAP_SERVICES` JSON
-blob, which `cf env` redacts. Pushes themselves carry no secret material
-at all.
+Passing secrets via `cf push --var` puts them on the command line —
+visible in argv, shell history, and any `set -x` output, and they
+travel with every subsequent push. Cloud Foundry's idiomatic answer is
+a **user-provided service** (UPS): the secret is handed to CF once,
+outside of any push, and the app binds the service by name.
 
 We use **two separate services** — `anthropic-creds` and `github-creds`
 — rather than one combined blob so each credential can rotate and be
 shared with other apps independently.
 
-#### The flow
+#### What the `cf` commands look like
 
-1. **The secrets live on the developer's laptop.** The Anthropic key is
-   expected in a shell environment variable. The GitHub token is sourced
-   live from `gh`'s own secure storage (on macOS, the system Keychain) —
-   whatever `gh` is logged in as locally is what the laptop carries.
-2. **A small setup script publishes them into CF services.** A shell
-   script reads both secrets locally and passes each one to
-   `cf create-user-provided-service` (or `cf update-user-provided-service`
-   when rotating) through a bash process substitution — an in-memory
-   pipe that gives `cf` a file-like `/dev/fd/...` path to read the JSON
-   from, so the secret lives only in memory and never hits argv or disk.
-   Rotation is just re-running the script in update mode; no `cf push`
-   needed.
-3. **The manifest binds the services by name.** `cf push` itself passes
-   no secret arguments; it just declares which services the app
-   consumes.
-4. **The container hoists them into env vars the tools expect.** A
-   `.profile.d/` script parses `VCAP_SERVICES` at the start of every
-   task invocation, exports `ANTHROPIC_API_KEY` and `GH_TOKEN`, and runs
-   `gh auth setup-git` so raw `git clone`/`push` over HTTPS use the same
-   token as `gh` without any extra wiring. From the agent's perspective
-   the environment looks identical to the simpler env-var design; the
-   difference is entirely upstream.
+Creating each secret as its own UPS is one command per service:
 
-Because the GitHub token is fetched live from `gh`'s local storage each
-time the setup script runs, rotation is essentially free: re-login with
-`gh` or rotate the token in GitHub's UI, then re-run the setup script.
-The next task invocation picks up the new value on its own.
+```sh
+cf create-user-provided-service anthropic-creds -p '{"api_key":"..."}'
+cf create-user-provided-service github-creds    -p '{"token":"..."}'
+```
 
-The scoping of the token is inherited from whatever the laptop's `gh`
-session has — fine for local experimentation. For a more
-production-shaped setup, the same service contract works with a
-fine-grained PAT scoped to specific repos, or with a short-lived GitHub
-App installation token refreshed by an external process.
+`cf cups` takes either a literal JSON string (as above) or a path to a
+JSON file. Each scenario's `create-services.sh` picks the form that
+keeps secret material off the command line; see the scripts for the
+details of where the values come from on your laptop.
+
+The manifest declares the bindings:
+
+```yaml
+services:
+  - anthropic-creds
+  - github-creds
+```
+
+That's all `cf push` knows about credentials — no `--var` passes, no
+secret arguments.
+
+Rotating a value is `cf update-user-provided-service <name> -p <json>`
+— no re-push needed; the next task invocation reads the fresh value.
+
+#### Inside the container
+
+CF injects a single env var, `VCAP_SERVICES`, whose value is a JSON
+blob with every bound service and its credentials. The agent tools
+(`gh`, the Anthropic SDK) expect flat env vars like `ANTHROPIC_API_KEY`
+and `GH_TOKEN`, not a JSON blob. Every scenario ships a
+`.profile.d/vcap.sh` that runs before every task, parses
+`VCAP_SERVICES` with `jq`, and re-exports the two values under the
+names the tools read. `cf env` redacts the secrets in all output.
