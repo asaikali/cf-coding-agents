@@ -51,7 +51,7 @@ dependencies = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "claude-agent-sdk", specifier = ">=0.1.0" }]
+requires-dist = [{ name = "claude-agent-sdk", specifier = "==0.1.63" }]
 
 [[package]]
 name = "cffi"

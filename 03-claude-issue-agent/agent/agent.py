@@ -39,7 +39,7 @@ You are a coding agent working on issue #{issue} in the GitHub repo {repo}.
 Your goal is to implement what the issue asks for and open a pull request
 that closes the issue.
 
-Workflow:
+Workflow: 
 1. Clone the repo into ./work:
      gh repo clone {repo} ./work
 2. cd ./work

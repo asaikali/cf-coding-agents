@@ -6,8 +6,6 @@ applications:
   buildpacks:
     - https://github.com/cloudfoundry/apt-buildpack
     - python_buildpack
-  memory: 1G
-  disk_quota: 2G
   health-check-type: none
   services:
     - anthropic-creds
@@ -18,3 +16,5 @@ applications:
       instances: 0
     - type: task
       command: uv run python agent.py "hello"
+      memory: 2G
+      disk_quota: 4G
