@@ -32,7 +32,7 @@ specifically, see "Investigation log" for everything tried and
 | [`01-claude-cli/`](01-claude-cli/) | No SDK; runs the Claude Code CLI binary directly via `-p` batch mode | ✅ works |
 | [`02-claude-python-sdk/`](02-claude-python-sdk/) | Python SDK, trivial hello query | ❌ `Control request timeout: initialize` |
 | [`03-claude-issue-agent/`](03-claude-issue-agent/) | Python SDK, GitHub-issue-to-PR agent workflow | ❌ same timeout as scenario 2 |
-| **[`04-claude-ts-agent/`](04-claude-ts-agent/)** | **TypeScript SDK, same GitHub-issue-to-PR workflow as scenario 3** | **✅ SDK works end-to-end. Currently blocked on a separate Maven CA-trust issue at the Spring PetClinic compile step — unrelated to the SDK.** |
+| **[`04-claude-ts-agent/`](04-claude-ts-agent/)** | **TypeScript SDK, same GitHub-issue-to-PR workflow as scenario 3** | **✅ fully green end-to-end. The agent clones `asaikali/spring-petclinic`, runs `./mvnw compile`, boots the app with `./mvnw spring-boot:run`, polls for the "Started PetClinicApplication" banner, curls `http://localhost:8080/` with an HTTP 200 response, stops the app, and prints `VERIFIED: clone + compile + run + curl all passed`. Total runtime ~99s.** |
 
 Scenarios 2 and 3 are left in the tree in their configured-but-broken
 state. Their `agent.py` contains the full set of CI/headless options
@@ -355,13 +355,14 @@ which successfully `gh repo clone`s Spring PetClinic), gets real
 tool results back, and returns a proper `ResultMessage`. No init
 timeout.
 
-(The scenario 4 smoke *fails* at the subsequent `./mvnw compile -q`
-step with a Maven SSL trust-store error:
+(The initial scenario 4 smoke *failed* at the subsequent
+`./mvnw compile -q` step with
 `java.security.InvalidAlgorithmParameterException: the trustAnchors
-parameter must be non-empty`. That's a separate, unrelated
-environmental problem: Tanzu's Temurin package from `apt-buildpack`
-isn't wired up to a CA trust store. Easy env-var / package fix, and
-irrelevant to the SDK investigation.)
+parameter must be non-empty` — a separate environmental problem
+unrelated to the SDK. Fixed in a follow-up; see the "Rough edges"
+section below for the root cause and the `.profile.d/java.sh`
+workaround. After that fix scenario 4 runs the full
+clone/compile/run/curl sequence end-to-end in ~99s.)
 
 This data point is what isolated the bug to the Python SDK
 specifically. Before scenario 4 we thought the CF runtime was
@@ -440,6 +441,211 @@ typed message stream and hook surface. But mentioned here because the
 `-p` batch mode works on CF — scenario 1 proves it. If you really
 need Python and can live without streaming-mode features, this is
 feasible.
+
+## Rough edges catalogued during this work
+
+The SDK timeout is the headline bug, but along the way we hit a
+pile of smaller sharp edges that are worth writing down. The point of
+this repo is to learn what's actually possible for coding agents on
+CF, and each of these is a real speed-bump that a future reader
+should know about.
+
+### R1. `apt-buildpack` doesn't run package post-install hooks
+
+**What:** Every Debian/Ubuntu package has optional maintainer scripts
+(`postinst`, etc.) that run on install via `dpkg` — creating users,
+enabling systemd units, running `update-alternatives`, populating
+derived state, etc. `apt-buildpack` unpacks `.deb` files but does not
+execute these scripts.
+
+**Downstream consequences:**
+- `ca-certificates-java`'s `jks-keystore` hook never runs, so no Java
+  trust store gets built on the droplet (see R2).
+- `update-alternatives` doesn't wire binaries onto `PATH`. Temurin's
+  `java` would normally land at `/usr/bin/java` via alternatives; in
+  our droplet it only exists under `$JAVA_HOME/bin/`.
+- Ubuntu's `maven` package splits across many `libmaven-*-java`
+  companion packages and the post-install scripts that stitch them
+  together don't run; Maven is unusable even with the package installed
+  (see R5).
+
+**Workaround pattern:** for any package that relies on post-install
+behavior, we either (a) install the tool a different way (vendor
+tarball, direct binary download), or (b) replicate the post-install
+logic ourselves in a `.profile.d/` script.
+
+### R2. cflinuxfs4 ships PEM CAs but not a Java keystore
+
+**What:** The stack has `/etc/ssl/certs/ca-certificates.crt` (PEM,
+used by OpenSSL/curl/git) but no `/etc/ssl/certs/java/cacerts` (JKS,
+used by the JVM). On a normal Ubuntu box, `ca-certificates-java` fills
+that gap via a post-install hook — which doesn't run on
+`apt-buildpack` (see R1). Temurin's `.deb` would normally symlink its
+own `$JAVA_HOME/lib/security/cacerts` to the system keystore; after
+`apt-buildpack` unpacks it that symlink either points nowhere or the
+bundled file is an empty placeholder.
+
+**Symptom:** any JVM TLS handshake fails with
+`java.security.InvalidAlgorithmParameterException: the trustAnchors
+parameter must be non-empty`. Maven Central, git HTTPS from Java,
+anything.
+
+**Workaround:** `04-claude-ts-agent/agent/.profile.d/java.sh` splits
+`/etc/ssl/certs/ca-certificates.crt` and imports each cert into a
+`$HOME/truststore.jks` via `keytool`, then exports
+`JAVA_TOOL_OPTIONS=-Djavax.net.ssl.trustStore=...
+-Djavax.net.ssl.trustStorePassword=changeit`. Does the work once per
+container; subsequent task invocations in the same container reuse
+the keystore.
+
+**Status:** workaround applied; full upstream fix would require
+either a cflinuxfs4 version that includes `ca-certificates-java`'s
+output or an `apt-buildpack` that runs post-install scripts.
+
+### R3. Manifest app-level `memory`/`disk_quota` don't cascade when `processes:` is declared
+
+**What:** If your manifest declares a `processes:` block, the
+app-level `memory` and `disk_quota` values do **not** flow into the
+individual processes — each process silently gets CF's default 1G/1G
+unless overridden at process level. CF's own documentation suggests
+app-level values propagate, but empirically they don't (verified on a
+fresh push on TAS).
+
+**Symptom:** droplet extraction into the container fails with
+`No space left on device` during `cf run-task` because 1G disk can't
+hold the unpacked venv plus the bundled native binary.
+
+**Workaround:** put `memory:` and `disk_quota:` on the task process
+itself inside `processes:` — that's where they actually take effect.
+Don't bother setting them at app level; it's just misleading.
+
+### R4. `cf run-task` uses its own defaults, not the task process's
+
+**What:** Even if your manifest's `task` process has `memory: 2G,
+disk_quota: 8G`, invoking `cf run-task <app> --command '...'`
+defaults the ad-hoc task's resources to ~256M/1G. You have to pass
+`--process task` so `cf run-task` inherits that process type's
+memory/disk, or pass `-m 2G -k 8G` explicitly on every invocation.
+
+**Workaround:** all our `verify.sh` scripts use `--process task` and
+the READMEs call out the same pattern for `run-task` invocations.
+
+### R5. Ubuntu's `maven` package is broken under `apt-buildpack`
+
+**What:** The `maven` package depends on a chain of
+`libmaven-*-java` companion packages plus post-install scripts to
+wire them together. Under `apt-buildpack` the companions may or may
+not come along, and the wiring scripts definitely don't run. Net
+result: `mvn` is either missing or crashes with classpath errors.
+
+**Workaround in the early scenarios:** fetch Apache's binary tarball
+directly in `download.sh` and extract into `./bin/maven/`. Scenario 4
+sidesteps this entirely because PetClinic ships a `./mvnw` wrapper
+that only needs the JDK and internet access.
+
+### R6. Temurin's `java` isn't on `PATH` after `apt-buildpack` install
+
+**What:** Temurin's `.deb` installs `java` under
+`/usr/lib/jvm/temurin-*/bin/java` and relies on `update-alternatives`
+(run in a post-install hook) to expose it at `/usr/bin/java`. That
+hook doesn't run on `apt-buildpack`. The binary is there, but
+`shutil.which("java")` returns nothing.
+
+**Workaround:** `.profile.d/java.sh` sets `JAVA_HOME` explicitly and
+prepends `$JAVA_HOME/bin` to `PATH`. Every scenario that uses the JDK
+ships this shim.
+
+### R7. Ubuntu's default `nodejs` is ancient (v12); default Python setup is incomplete
+
+**What:** cflinuxfs4's `nodejs` from default Ubuntu repos is Node 12
+— a decade behind the current LTS. Ubuntu's `python3` is fine on its
+own, but `python3-pip` ships without `distutils`, and the
+`dist-packages` path the packaged pip lives in isn't on Python's
+default import path under `apt-buildpack`'s extraction layout.
+
+**Workaround:** add NodeSource's apt repo (see scenario 1's
+`apt.yml`) to get a current Node LTS. For Python, add
+`python3-distutils` to `apt.yml` and wire `PYTHONPATH` via
+`.profile.d/python.sh`.
+
+### R8. CLI `cli_path` default discovery doesn't find the SDK's bundled binary
+
+**What:** Both the Python and TS SDKs default to
+`shutil.which("claude")` + a list of common install paths
+(`~/.npm-global/bin`, `/usr/local/bin`, `~/.local/bin`, etc.). None
+of those exist in the CF droplet, so the SDK fails to find its own
+bundled binary unless you explicitly pass `cli_path`.
+
+**Workaround:** resolve `cli_path` from the installed SDK package's
+own file layout
+(`Path(claude_agent_sdk.__file__).parent / "_bundled" / "claude"` on
+the Python side; equivalent in TS). Both scenarios 3 and 4 do this.
+
+### R9. CLI refuses `--dangerously-skip-permissions` when euid == 0
+
+**What:** The bundled Claude Code binary has a safety check that
+rejects `--dangerously-skip-permissions` (the wire form of
+`permission_mode="bypassPermissions"`) when run as root. On CF this
+isn't a problem (processes run as `vcap` uid 2000), but it trips up
+anyone trying to reproduce a failing case in Docker without
+`--user` or `USER vcap` in their Dockerfile.
+
+**Workaround:** when testing in Docker, always run as a non-root
+user. cflinuxfs4's image already has `vcap` provisioned.
+
+### R10. `cf push --var` leaks secrets into argv and shell history
+
+**What:** Values passed to `cf push --var <name>=<value>` appear on
+the `cf` CLI's argv for the push duration — visible in `ps`,
+`history`, anything echoed by `set -x`, CI logs. Not subtle; every
+push re-exposes the secret.
+
+**Workaround:** use user-provided services (UPS) instead, via
+`cf create-user-provided-service` (with `-p <file>` or a process
+substitution), bound to the app by name in the manifest. The secret
+is handed to CF once, outside of any push, and reaches the app as
+part of `VCAP_SERVICES`. See the root README's "How credentials
+reach the agent" section.
+
+### R11. UPS secrets arrive as a `VCAP_SERVICES` JSON blob, not flat env vars
+
+**What:** The tools that consume secrets (the Anthropic SDK, `gh`,
+etc.) read flat env vars (`ANTHROPIC_API_KEY`, `GH_TOKEN`). CF gives
+you a single `VCAP_SERVICES` env var containing JSON. Nothing in the
+container automatically parses it.
+
+**Workaround:** `.profile.d/vcap.sh` (present in scenarios 2, 3, 4)
+uses `jq` to pull each credential out of the JSON and re-export it
+under the flat name the tool expects. `jq` itself comes from the
+cflinuxfs4 stack — no `apt.yml` entry needed.
+
+### R12. `/tmp` has a separate, smaller quota than the app's disk
+
+**What:** Writing to `/tmp` in a CF task container is subject to a
+quota smaller than `disk_quota`. It's platform-dependent and
+undocumented in the places we looked.
+
+**Workaround:** clone repos / write large transient files under a
+PWD-relative path (`./work`, etc.) rather than `/tmp`. The
+scenario-3 agent prompt explicitly says "Clone the repo into ./work
+(PWD-relative; avoids /tmp quota)".
+
+### R13. CF creates an implicit `web` process with a bogus default start command
+
+**What:** Every CF app has a `web` process, even for task-only apps.
+If you don't declare one in `processes:`, CF creates it with the
+default start command `>&2 echo Error: no start command specified
+during staging or launch && exit 1` — which shows up noisily in
+`cf push` output as if the push failed.
+
+**Workaround:** declare a `web` process with
+`command: sleep infinity` and `instances: 0` to keep `cf push`
+output clean. Non-functional, purely cosmetic.
+
+### R14. **The big one:** Python Claude Agent SDK subprocess hangs at `initialize`
+
+Covered in full above. Workaround: use the TypeScript SDK via
+scenario 4's shape. Upstream bug yet to be filed.
 
 ## Concrete next steps if someone wants to fix the Python-SDK case
 
