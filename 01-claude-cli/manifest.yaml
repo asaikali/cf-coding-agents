@@ -18,3 +18,5 @@ applications:
       instances: 0
     - type: task
       command: ./bin/claude -p "hello" < /dev/null
+      memory: 2G
+      disk_quota: 8G
