@@ -1,0 +1,16 @@
+{
+  "name": "cf-ts-agent",
+  "version": "0.1.0",
+  "description": "Cloud Foundry task that turns a GitHub issue into a pull request using the TypeScript Claude Agent SDK.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "tsx agent.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.1.0",
+    "tsx": "^4.19.0"
+  }
+}

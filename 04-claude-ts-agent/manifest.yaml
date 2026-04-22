@@ -1,0 +1,24 @@
+---
+applications:
+- name: agent-ts
+  path: ./agent
+  no-route: true
+  buildpacks:
+    - https://github.com/cloudfoundry/apt-buildpack
+    - nodejs_buildpack
+  health-check-type: none
+  services:
+    - anthropic-creds
+    - github-creds
+  env:
+    TARGET_REPO: asaikali/spring-petclinic
+    # nodejs_buildpack otherwise expects a start script; we're task-only.
+    NODE_MODULES_CACHE: "false"
+  processes:
+    - type: web
+      command: sleep infinity
+      instances: 0
+    - type: task
+      command: node_modules/.bin/tsx agent.ts
+      memory: 2G
+      disk_quota: 8G
